@@ -214,7 +214,7 @@ def clustering(graph):
     db.fit(graph)
     return labels_from_DBclusters(db)
 
-#TODO 
+#TODO review
 #does some postprocessing and visualization
 def postprocessing(labels, subjects):
     result = []
@@ -238,5 +238,8 @@ def main():
     print("Clustering Done!")
     result = postprocessing(labels, subjects)
     print("Done!")
+
+    #TODO
+    #Shacl Creation
 
 main()
