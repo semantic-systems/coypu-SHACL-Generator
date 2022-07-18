@@ -4,17 +4,10 @@ from rdflib import Graph, URIRef, Literal, XSD
 import numpy as np
 from sklearn.preprocessing import normalize
 
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import (auc, average_precision_score, 
                               roc_auc_score, roc_curve, precision_recall_curve)
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.cluster import DBSCAN
-from sklearn.manifold import TSNE
-from sklearn.linear_model import LinearRegression
-import seaborn as sns
-from sklearn.base import BaseEstimator
 
 #get numerical value for objects
 #objects have an 'objects.dataype' as well as 'type(object)'
