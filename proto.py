@@ -1,5 +1,5 @@
 from logging import exception
-import sys
+import sys, time
 from rdflib import Graph, URIRef, Literal, XSD
 import numpy as np
 from sklearn.preprocessing import normalize
@@ -30,7 +30,6 @@ def loadGraph():
     #load correct knowledge-graph from command line
     graph = Graph()
     graph.parse(sys.argv[1])
-    #i.e. graph.parse('/Training74//mergedGraph257.nt')
 
     #graph syntax check
     for subj, pred, obj in graph:
@@ -46,88 +45,96 @@ def preprocessing(graph):
     #helpful variables for filling the matrix
     graphPredicates = [] #saves a set of all properties in a graph
     graphPredicatesCount = [] #saves the max cardinality for each property in a graph
+    graphSubjects = [] #saves a set of all subjects in a graph
 
-    #saves a set of all subjects in a graph (useful only for iteration)
-    graphSubjects = []
+    #Test
+    #ss = time.time()
+
+    subjectSet = set()
+    for s in graph.subjects():
+        subjectSet.add(s)
+
+    for e in subjectSet:
+        graphSubjects.append(e)
+
+    #Test
+    #ee = time.time()    
+    #print("Set-Erstellung-Time:",ee-ss)
 
     #iterates through all subjects of a graph to transform into a numerical version
-    for s in graph.subjects():
-        if s not in graphSubjects:
-            #updates iteration over subjects
-            graphSubjects.append(s)
+    for s in graphSubjects:
+        #creates a Concise Bounded Description (CBD) for a given ressource
+        cbd = Graph.cbd(graph, s)
+        #TEST
+        #print("New CBD\n")
 
-            #creates a Concise Bounded Description (CBD) for a given ressource
-            cbd = Graph.cbd(graph, s)
-            #TEST
-            #print("New CBD\n")
+        #appends [subject] and empty predicates to array
+        graphArray.append([s])
+        for element in graphPredicates:
+            #adds all existing predicates with empty values to the end of 's'
+            graphArray[-1].append(element)
+            graphArray[-1].append([0,0])
+        
+        #helpful variable
+        cbdPredicates = []
 
-            #appends [subject] and empty predicates to array
-            graphArray.append([s])
-            for element in graphPredicates:
-                #adds all existing predicates with empty values to the end of 's'
-                graphArray[-1].append(element)
-                graphArray[-1].append([0,0])
+        for pred in cbd.predicates(s,None):
+            if pred not in cbdPredicates:
+                cbdPredicates.append(pred)
+                predGraph = Graph()
+                predGraph += cbd.triples((s,pred,None))
+                
+                #get count for pred
+                count = len(predGraph)
+                #set init rangeCount for pred
+                rangeCount = 0
 
-            #helpful variable
-            cbdPredicates = []
+                #get rangeCount
+                cbdObjects = []
+                rangeCountTypes = []
+                for obj in predGraph.objects():
+                    if obj not in cbdObjects:
+                        cbdObjects.append(obj)
+                        a = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                        type = graph.value(obj, a)
+                        if type not in rangeCountTypes:
+                            rangeCountTypes.append(type)
+                            rangeCount += 1
+                        #print(obj, type)
+                        
+                        #adds element to graphArray
+                        #check for existing or new predicate
+                        if pred in graphPredicates:
+                            #convert into proper datatype
+                            addObj = convert(obj)
+                            #add obj to graphArray
+                            ind = ((graphPredicates.index(pred)*2) + 2)
+                            graphArray[-1][ind].append(addObj)
+                        else:
+                            #update graphPredicates with new predicate
+                            graphPredicates.append(pred)
+                            #update graphPredicatesCount with new Count
+                            graphPredicatesCount.append(count)
 
-            for pred in cbd.predicates(s,None):
-                if pred not in cbdPredicates:
-                    cbdPredicates.append(pred)
-                    predGraph = Graph()
-                    predGraph += cbd.triples((s,pred,None))
-                    
-                    #get count for pred
-                    count = len(predGraph)
-                    #set init rangeCount for pred
-                    rangeCount = 0
+                            #append pred for all PREVIOUS entries
+                            for newPredInd in range(0,len(graphArray)-1):
+                                graphArray[newPredInd].append(pred)
+                                graphArray[newPredInd].append([0,0])
+                            #append pred for current entry
+                            graphArray[-1].append(pred)
 
-                    #get rangeCount
-                    cbdObjects = []
-                    rangeCountTypes = []
-                    for obj in predGraph.objects():
-                        if obj not in cbdObjects:
-                            cbdObjects.append(obj)
-                            a = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                            type = graph.value(obj, a)
-                            if type not in rangeCountTypes:
-                                rangeCountTypes.append(type)
-                                rangeCount += 1
-                            #print(obj, type)
-                            
-                            #adds element to graphArray
-                            #check for existing or new predicate
-                            if pred in graphPredicates:
-                                #convert into proper datatype
-                                addObj = convert(obj)
-                                #add obj to graphArray
-                                ind = ((graphPredicates.index(pred)*2) + 2)
-                                graphArray[-1][ind].append(addObj)
-                            else:
-                                #update graphPredicates with new predicate
-                                graphPredicates.append(pred)
-                                #update graphPredicatesCount with new Count
-                                graphPredicatesCount.append(count)
+                            #convert into proper datatype
+                            addObj = convert(obj)
+                            #add correct obj value into array
+                            graphArray[-1].append([0,0,addObj])
 
-                                #append pred for all PREVIOUS entries
-                                for newPredInd in range(0,len(graphArray)-1):
-                                    graphArray[newPredInd].append(pred)
-                                    graphArray[newPredInd].append([0,0])
-                                #append pred for current entry
-                                graphArray[-1].append(pred)
-
-                                #convert into proper datatype
-                                addObj = convert(obj)
-                                #add correct obj value into array
-                                graphArray[-1].append([0,0,addObj])
-
-                    #adds count and rangeCount into array/list
-                    ind = ((graphPredicates.index(pred)*2) + 2)   
-                    graphArray[-1][ind][0] = count
-                    graphArray[-1][ind][1] = rangeCount
-                    #update graphPredicatesCount
-                    if(count > graphPredicatesCount[graphPredicates.index(pred)]):
-                        graphPredicatesCount[graphPredicates.index(pred)] = count
+                #adds count and rangeCount into array/list
+                ind = ((graphPredicates.index(pred)*2) + 2)   
+                graphArray[-1][ind][0] = count
+                graphArray[-1][ind][1] = rangeCount
+                #update graphPredicatesCount
+                if(count > graphPredicatesCount[graphPredicates.index(pred)]):
+                    graphPredicatesCount[graphPredicates.index(pred)] = count
 
     #add zeros to fill up
     #iterate through all subject-vectors         
@@ -201,7 +208,7 @@ def labels_from_DBclusters(db):
     return(labels)   
 
 #TODO
-#does machine learning based clustering on matrix of vectors
+#does clustering on matrix of vectors
 def clustering(graph):
     db = DBSCAN(eps=0.5, min_samples=5)
     db.fit(graph)
@@ -223,8 +230,10 @@ def postprocessing(labels, subjects):
 def main():
     graph = loadGraph()
     print("Graph Loading Done!")
+    start = time.time()
     graph, subjects, predicates, pCount = preprocessing(graph)
-    print("Preprocessing Done!")
+    end = time.time()
+    print("Preprocessing Done! In",end-start)
     graph = listToArray(graph)
     print("Numeric extraction Done!")
     labels = clustering(graph)
