@@ -1,29 +1,16 @@
+from enum import unique
 from logging import exception
+from re import sub
 import sys, time
 from rdflib import Graph, URIRef, Literal, XSD
 import numpy as np
+import sparse
 from sklearn.preprocessing import normalize
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (auc, average_precision_score, 
                               roc_auc_score, roc_curve, precision_recall_curve)
 from sklearn.cluster import DBSCAN
-
-#get numerical value for objects
-#objects have an 'objects.dataype' as well as 'type(object)'
-#can be improved by more sophisticated conversion
-def convert(object):
-    #check for class Literal. Everything else is discarded.
-    if type(object) == Literal:
-        #check for numerics
-        if((object.isdigit()) or (object.datatype == XSD.integer)):    
-            #return numeric value
-            return int(object)
-        #for strings return lenght
-        else:
-            return len(object)
-    #standard case is 0 (no string, no int)
-    return 0
 
 #loading the knowledge graph from file
 def loadGraph():
@@ -37,147 +24,89 @@ def loadGraph():
             raise exception("It better be!")
     return graph
 
-#takes an rdf-graph and returns a corresponding matrix
-def preprocessing(graph):
-    #saves the graph as a list (end product)
-    graphArray = []
+#takes an rdf-graph and returns a matrix
+def preprocessing_tensor(graph):
 
-    #helpful variables for filling the matrix
     graphPredicates = [] #saves a set of all properties in a graph
-    graphPredicatesCount = [] #saves the max cardinality for each property in a graph
     graphSubjects = [] #saves a set of all subjects in a graph
+    graphObjects = [] #saves a set of all objects in a graph
 
-    #Test
-    #ss = time.time()
+    #INIT MATRIX
 
     subjectSet = set()
-    for s in graph.subjects():
+    for s in graph.subjects(unique=True):
         subjectSet.add(s)
+    graphSubjects = list(subjectSet)
 
-    for e in subjectSet:
-        graphSubjects.append(e)
+    predicateSet = set()
+    for p in graph.predicates(unique=True):
+        predicateSet.add(p)
+    graphPredicates = list(predicateSet)
 
-    #Test
-    #ee = time.time()    
-    #print("Set-Erstellung-Time:",ee-ss)
+    objectSet = set()
+    for o in graph.objects(unique=True):
+        if(type(o)== URIRef):
+            objectSet.add(o)
+    graphObjects = list(objectSet)
 
-    #iterates through all subjects of a graph to transform into a numerical version
-    for s in graphSubjects:
+    #graphMatrix = sparse.COO(coords=[[[0]]],shape=(len(graphPredicates),len(graphSubjects),len(graphSubjects)))
+    graphMatrix = sparse.DOK(shape=(len(graphPredicates),len(graphSubjects),len(graphObjects)), dtype=int)
+    
+    #Fills matrix with data
+    #iterates through all subjects of a graph and adds corresponding entry into the matrix
+    for subIndex, s in enumerate(graphSubjects):
         #creates a Concise Bounded Description (CBD) for a given ressource
         cbd = Graph.cbd(graph, s)
-        #TEST
-        #print("New CBD\n")
 
-        #appends [subject] and empty predicates to array
-        graphArray.append([s])
-        for element in graphPredicates:
-            #adds all existing predicates with empty values to the end of 's'
-            graphArray[-1].append(element)
-            graphArray[-1].append([0,0])
-        
-        #helpful variable
-        cbdPredicates = []
+        for predIndex, pred in enumerate(graphPredicates):
+            predGraph = Graph()
+            predGraph += cbd.triples((s,pred,None))
 
-        for pred in cbd.predicates(s,None):
-            if pred not in cbdPredicates:
-                cbdPredicates.append(pred)
-                predGraph = Graph()
-                predGraph += cbd.triples((s,pred,None))
-                
-                #get count for pred
-                count = len(predGraph)
-                #set init rangeCount for pred
-                rangeCount = 0
+            for obj in predGraph.objects(unique=True):
 
-                #get rangeCount
-                cbdObjects = []
-                rangeCountTypes = []
-                for obj in predGraph.objects():
-                    if obj not in cbdObjects:
-                        cbdObjects.append(obj)
-                        a = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                        type = graph.value(obj, a)
-                        if type not in rangeCountTypes:
-                            rangeCountTypes.append(type)
-                            rangeCount += 1
-                        #print(obj, type)
-                        
-                        #adds element to graphArray
-                        #check for existing or new predicate
-                        if pred in graphPredicates:
-                            #convert into proper datatype
-                            addObj = convert(obj)
-                            #add obj to graphArray
-                            ind = ((graphPredicates.index(pred)*2) + 2)
-                            graphArray[-1][ind].append(addObj)
-                        else:
-                            #update graphPredicates with new predicate
-                            graphPredicates.append(pred)
-                            #update graphPredicatesCount with new Count
-                            graphPredicatesCount.append(count)
-
-                            #append pred for all PREVIOUS entries
-                            for newPredInd in range(0,len(graphArray)-1):
-                                graphArray[newPredInd].append(pred)
-                                graphArray[newPredInd].append([0,0])
-                            #append pred for current entry
-                            graphArray[-1].append(pred)
-
-                            #convert into proper datatype
-                            addObj = convert(obj)
-                            #add correct obj value into array
-                            graphArray[-1].append([0,0,addObj])
-
-                #adds count and rangeCount into array/list
-                ind = ((graphPredicates.index(pred)*2) + 2)   
-                graphArray[-1][ind][0] = count
-                graphArray[-1][ind][1] = rangeCount
-                #update graphPredicatesCount
-                if(count > graphPredicatesCount[graphPredicates.index(pred)]):
-                    graphPredicatesCount[graphPredicates.index(pred)] = count
-
-    #add zeros to fill up
-    #iterate through all subject-vectors         
-    for resS in range (0, len(graphArray)):
-        #iterate through all predicates starting at index 1 bc index 0 is the subject name
-        for resP in range (1, len(graphArray[resS]),2):
-            #get the current predicate
-            fillPred = graphArray[resS][resP]
-            #get the index of the current predicate
-            ind = graphPredicates.index(fillPred)
-            #see how many entries that predicate should have
-            maxCount = graphPredicatesCount[ind]
-            #TEST
-            #print("Das ist:",len(graphArray[resS][resP+1]), "Das müsste:", maxCount+2, "\n")
-            #add the necessary empty values(0)
-            #+2 to take into account the range and rangeCount attributes
-            while len(graphArray[resS][resP+1]) < (maxCount + 2):
-                graphArray[resS][resP+1].append(0)
-
-    #TEST
-    #print("End-Array:")
-    #for f in graph:
-    #    print("Next Subject:",f,"\n")
-    #print("End-Array Done\n")
-    return graphArray, graphSubjects, graphPredicates, graphPredicatesCount
-
-#cuts all the subjects and predicates and leaves only the objects/numbers
-def listToArray(listArray):
-    #reduce list to only the object dimension
-    #resulting list is two dimensional with vectors of equal lenght for every subject of a graph
-    tempList = []
-    for s in range(0,len(listArray)):
-        tempList.append([])
-        for p in range (2, len(listArray[s]), 2):
-            for o in range (0, len(listArray[s][p])):
-                tempList[s].append(listArray[s][p][o])
+                #adds element to Matrix after checking for URI Type
+                if type(obj) == URIRef:
+                    #test if obj exists
+                    try:
+                        objIndex = graphObjects.index(obj)
+                        #Test           
+                        #print(obj, "<- wants to be added with possible new Index:", predIndex, subIndex, objIndex)
+                        graphMatrix[predIndex,subIndex,objIndex] = 1
+                    except ValueError:
+                        #TEST
+                        #print(obj,"not in objectlist!")
+                        continue
     
-    #convert to numpy for better calculation
-    npArray = np.array(tempList)
+    #TEST
+    #print("Graphsubjects:",graphSubjects)
+    #print("GraphPredicates:",graphPredicates)
+    #print("GraphObjects:",graphObjects)
+    #print("Graphmatrix:\n",graphMatrix.todense())
 
-    #normalize vectors of matrix
-    npArray = normalize(npArray, norm='l1')
-    return npArray  
+    #TODO
+    #transform 3D matrix into correctly sliced 2D csr matrix
+    #TEST
+    startC = time.time()
+    graphMatrix = sparse.COO(graphMatrix)
+
+    for n in range(0,len(graphSubjects)):
+        slice = graphMatrix[:,n:(n+1),:].flatten() 
+        if n == 0:
+            oneDMatrix = sparse.COO(slice)
+        else:
+            oneDMatrix = sparse.concatenate((oneDMatrix, slice), axis=0)
+        #TEST
+        #print("Slice of subject",n,":\n", slice.todense())
+
+    twoDMatrix = oneDMatrix.reshape(shape=(len(graphSubjects),(len(graphObjects)*len(graphPredicates))))
+    result = twoDMatrix.tocsr()
+    
+    #TEST
+    #print("Endresult:\n",twoDMatrix.todense())
+    endC = time.time()
+    print("Conversion done in:", endC-startC)
+    return result, graphSubjects, graphPredicates, graphObjects
+
 
 #taken from 'https://donernesto.github.io/blog/outlier-detection-with-dbscan/'
 def labels_from_DBclusters(db):
@@ -192,6 +121,7 @@ def labels_from_DBclusters(db):
     db: a fitted DBscan instance
     Returns: labels (similar to "y_predicted", but the values merely reflect a ranking)
     """
+    #print(db.labels_)
     labels = np.zeros(len(db.labels_))
     
     # make a list of tuples: (i, num points in i) for i in db.labels_
@@ -210,7 +140,7 @@ def labels_from_DBclusters(db):
 #TODO
 #does clustering on matrix of vectors
 def clustering(graph):
-    db = DBSCAN(eps=0.5, min_samples=5)
+    db = DBSCAN(eps=0.1, min_samples=5)
     db.fit(graph)
     return labels_from_DBclusters(db)
 
@@ -231,11 +161,9 @@ def main():
     graph = loadGraph()
     print("Graph Loading Done!")
     start = time.time()
-    graph, subjects, predicates, pCount = preprocessing(graph)
+    graph, subjects, predicates, objects = preprocessing_tensor(graph)
     end = time.time()
     print("Preprocessing Done! In",end-start)
-    graph = listToArray(graph)
-    print("Numeric extraction Done!")
     labels = clustering(graph)
     print("Clustering Done!")
     result = postprocessing(labels, subjects)
