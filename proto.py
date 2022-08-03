@@ -49,7 +49,6 @@ def preprocessing_tensor(graph):
             objectSet.add(o)
     graphObjects = list(objectSet)
 
-    #graphMatrix = sparse.COO(coords=[[[0]]],shape=(len(graphPredicates),len(graphSubjects),len(graphSubjects)))
     graphMatrix = sparse.DOK(shape=(len(graphPredicates),len(graphSubjects),len(graphObjects)), dtype=int)
     
     #Fills matrix with data
@@ -83,7 +82,6 @@ def preprocessing_tensor(graph):
     #print("GraphObjects:",graphObjects)
     #print("Graphmatrix:\n",graphMatrix.todense())
 
-    #TODO
     #transform 3D matrix into correctly sliced 2D csr matrix
     #TEST
     startC = time.time()
@@ -121,7 +119,6 @@ def labels_from_DBclusters(db):
     db: a fitted DBscan instance
     Returns: labels (similar to "y_predicted", but the values merely reflect a ranking)
     """
-    #print(db.labels_)
     labels = np.zeros(len(db.labels_))
     
     # make a list of tuples: (i, num points in i) for i in db.labels_
@@ -137,7 +134,7 @@ def labels_from_DBclusters(db):
     labels = (labels - min(labels)) / (max(labels) - min(labels))
     return(labels)   
 
-#TODO
+#TODO refine
 #does clustering on matrix of vectors
 def clustering(graph):
     db = DBSCAN(eps=0.1, min_samples=5)
