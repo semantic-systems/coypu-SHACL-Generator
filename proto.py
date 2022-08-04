@@ -1,16 +1,13 @@
-from enum import unique
 from logging import exception
-from re import sub
 import sys, time
 from rdflib import Graph, URIRef, Literal, XSD
 import numpy as np
 import sparse
-from sklearn.preprocessing import normalize
+import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import (auc, average_precision_score, 
-                              roc_auc_score, roc_curve, precision_recall_curve)
+from sklearn.preprocessing import normalize
 from sklearn.cluster import DBSCAN
+from sklearn.manifold import TSNE
 
 #loading the knowledge graph from file
 def loadGraph():
@@ -98,11 +95,12 @@ def preprocessing_tensor(graph):
 
     twoDMatrix = oneDMatrix.reshape(shape=(len(graphSubjects),(len(graphObjects)*len(graphPredicates))))
     result = twoDMatrix.tocsr()
+    result = normalize(result, norm='l1')
     
     #TEST
     #print("Endresult:\n",twoDMatrix.todense())
     endC = time.time()
-    print("Conversion done in:", endC-startC)
+    print("Conversion done in: {:.2f}".format(endC-startC))
     return result, graphSubjects, graphPredicates, graphObjects
 
 
@@ -132,26 +130,44 @@ def labels_from_DBclusters(db):
         
     # Scale the values between 0 and 1
     labels = (labels - min(labels)) / (max(labels) - min(labels))
-    return(labels)   
+    return labels   
 
 #TODO refine
 #does clustering on matrix of vectors
 def clustering(graph):
-    db = DBSCAN(eps=0.1, min_samples=5)
+    db = DBSCAN(eps=0.5, min_samples=3)
     db.fit(graph)
-    return labels_from_DBclusters(db)
+    return db.labels_, labels_from_DBclusters(db)
 
-#TODO review
+#TODO expand
 #does some postprocessing and visualization
-def postprocessing(labels, subjects):
+def postprocessing(rawLabels, labels, graph, subjects, predicates, objects):
     result = []
     for e in range(0,len(labels)):
-        result.append([subjects[e],labels[e]])
+        result.append([subjects[e],labels[e],rawLabels[e]])
     
     with open('result.txt', 'w') as resfile:
         for e in result:
             resfile.write(str(e)+"\n")
-    return result    
+
+    X_2D = TSNE(n_components=2, perplexity=30, learning_rate=200, n_iter=400, init='random').fit_transform(graph) # collapse in 2-D space for plotting
+    fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+
+    for i in set(rawLabels):
+        if i == -1: 
+            #outlier according to dbscan
+            ax.scatter(X_2D[rawLabels==i, 0], X_2D[rawLabels==i, 1], c='r', s=4, label='DBSCAN Outlier')
+        elif i == 0: 
+            #base class according to dbscan
+            ax.scatter(X_2D[rawLabels==i, 0], X_2D[rawLabels==i, 1], c='b', s=4, label='DBSCAN within range')
+        else:
+            ax.scatter(X_2D[rawLabels==i, 0], X_2D[rawLabels==i, 1], c='b', s=4)
+
+    plt.axis('off')
+    plt.legend(loc = 5, fontsize = 8)
+    plt.savefig('result.png')         
+
+    return result
 
 #main contains all function calls
 def main():
@@ -160,13 +176,17 @@ def main():
     start = time.time()
     graph, subjects, predicates, objects = preprocessing_tensor(graph)
     end = time.time()
-    print("Preprocessing Done! In",end-start)
-    labels = clustering(graph)
+    print("Preprocessing done in: {:.2f}".format(end-start))
+    rawLabels, labels = clustering(graph)
     print("Clustering Done!")
-    result = postprocessing(labels, subjects)
-    print("Done!")
+    start = time.time()
+    result = postprocessing(rawLabels, labels, graph, subjects, predicates, objects)
+    end = time.time()
+    print("Postprocessing done in: {:.2f}".format(end-start))
 
     #TODO
     #Shacl Creation
+    
+    print("Done!")
 
 main()
