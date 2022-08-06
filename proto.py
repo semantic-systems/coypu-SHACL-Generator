@@ -1,5 +1,6 @@
 from logging import exception
-import sys, time
+import sys, time, os
+
 from rdflib import Graph, URIRef, Literal, XSD
 import numpy as np
 import sparse
@@ -10,10 +11,10 @@ from sklearn.cluster import DBSCAN
 from sklearn.manifold import TSNE
 
 #loading the knowledge graph from file
-def loadGraph():
+def loadGraph(source):
     #load correct knowledge-graph from command line
     graph = Graph()
-    graph.parse(sys.argv[1])
+    graph.parse(source)
 
     #graph syntax check
     for subj, pred, obj in graph:
@@ -123,64 +124,124 @@ def labels_from_DBclusters(db):
     label_counts = [(i, np.sum(db.labels_==i)) for i in set(db.labels_) - set([-1])]
     label_counts.sort(key=lambda x : -x[1]) # sort by counts per class, descending
     
-    # assign the labels. Those points with label =-1 get highest label (equal to number of classes -1) 
-    labels[db.labels_== -1] = len(set(db.labels_)) - 1
+    # assign the labels. Those points with label =-1 get highest label (equal to number of classes -1)    
+    labels[db.labels_== -1] = len(set(db.labels_))  - 1
     for i, (label, label_count) in enumerate(label_counts):
         labels[db.labels_==label] = i
         
     # Scale the values between 0 and 1
     labels = (labels - min(labels)) / (max(labels) - min(labels))
+
     return labels   
 
-#TODO refine
 #does clustering on matrix of vectors
 def clustering(graph):
-    db = DBSCAN(eps=0.5, min_samples=3)
-    db.fit(graph)
-    return db.labels_, labels_from_DBclusters(db)
+    resultTable = []
+    for epsilon in range(30,60,5):
+        db = DBSCAN(eps=(epsilon/100), min_samples=1)
+        db.fit(graph)
+        resultTable.append([(epsilon/100), db.labels_, labels_from_DBclusters(db)])
+
+    return resultTable
 
 #TODO expand
 #does some postprocessing and visualization
-def postprocessing(rawLabels, labels, graph, subjects, predicates, objects):
-    result = []
-    for e in range(0,len(labels)):
-        result.append([subjects[e],labels[e],rawLabels[e]])
-    
-    with open('result.txt', 'w') as resfile:
-        for e in result:
-            resfile.write(str(e)+"\n")
-
+def postprocessing(erlTable, graph, subjects, predicates, objects):
     X_2D = TSNE(n_components=2, perplexity=30, learning_rate=200, n_iter=400, init='random').fit_transform(graph) # collapse in 2-D space for plotting
-    fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 
-    for i in set(rawLabels):
-        if i == -1: 
-            #outlier according to dbscan
-            ax.scatter(X_2D[rawLabels==i, 0], X_2D[rawLabels==i, 1], c='r', s=4, label='DBSCAN Outlier')
-        elif i == 0: 
-            #base class according to dbscan
-            ax.scatter(X_2D[rawLabels==i, 0], X_2D[rawLabels==i, 1], c='b', s=4, label='DBSCAN within range')
-        else:
-            ax.scatter(X_2D[rawLabels==i, 0], X_2D[rawLabels==i, 1], c='b', s=4)
+    #get manually inserted errors
+    manErr1 = loadGraph("outlier%20detection//Training74//Set2_errors.nt")
+    manErr2 = loadGraph("outlier%20detection//Training74//Set5_errors.nt")
+    manErr3 = loadGraph("outlier%20detection//Training74//Set7_errors.nt")
+    manErrSum = (manErr1 + manErr2) + manErr3
+    errSub = list(manErrSum.subjects(unique=True))
 
-    plt.axis('off')
-    plt.legend(loc = 5, fontsize = 8)
-    plt.savefig('result.png')         
+    #get indices of errorSubjects
+    errFound = np.empty(shape=(0), dtype= int)
+    for enumS, sub in enumerate(subjects):
+        for err in errSub:
+            if sub == err:
+                errFound = np.append(errFound, enumS)
+    #print(subjects)
+    #print("len(errSub)):",len(errSub))
+    #print("len(errFound):",len(errFound))
+    #print("errFound:",errFound)
+
+    #saving result .txt and .png for each Epsilon 
+    for index, labelTable in enumerate(erlTable):
+        
+        #SAVING DATA TO DISK
+           
+        total = len(labelTable[1])
+        errLabels = labelTable[1][errFound] #works to find all values in the trueLabel table for the erorrs. Returns a list.
+        ptotal = sum(labelTable[1] == -1)
+        tp = sum(errLabels == -1)
+        fp = ptotal - tp
+        ntotal = sum(labelTable[1] != -1)
+        fn = len(errLabels) - tp
+        tn = ntotal - fn
+
+        result = []
+        for e in range(0,len(labelTable[1])):
+            #version with copied label method
+            #result.append([subjects[e],labelTable[1][e],labelTable[2][e]])
+            #version with exclusively raw labels
+            result.append([subjects[e],labelTable[1][e]])
+
+        filename = "results/resultWithEpsilon{}.txt".format(labelTable[0])
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, 'w') as resfile:
+            resfile.write("Epsilon:"+str(labelTable[0])+"\n")
+            resfile.write("True Positives: {}  False Positives: {}  Positives Total: {}\nTrue Negatives: {}  False Negatives: {}  Total Negatives: {} \nTotal Amount of Subjects: {}\n\n"
+                                        .format(tp, fp, ptotal, tn, fn, ntotal, total))
+            for e in result:
+                resfile.write(str(e)+"\n")         
+
+        #VISUALISATION
+
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+
+        for i in set(labelTable[1]):
+            if i == -1: 
+                ax.scatter(X_2D[errFound, 0], X_2D[errFound, 1], c='r', marker='x', s=80, label='True Positive DBSCAN Outlier')
+            else:
+                ax.scatter(X_2D[errFound, 0], X_2D[errFound, 1], c='b', marker='x', s=80, label='False Negative')
+
+        for i in set(labelTable[1]):
+            if i == -1: 
+                #outlier according to dbscan
+                ax.scatter(X_2D[labelTable[1]==i, 0], X_2D[labelTable[1]==i, 1], c='r', s=4, label='DBSCAN Outlier')
+            elif i == 0: 
+                #base class according to dbscan
+                ax.scatter(X_2D[labelTable[1]==i, 0], X_2D[labelTable[1]==i, 1], c='b', s=4, label='DBSCAN within range')
+            else:
+                ax.scatter(X_2D[labelTable[1]==i, 0], X_2D[labelTable[1]==i, 1], c='b', s=4)
+
+        plt.axis('off')
+        plt.legend(loc = 5, fontsize = 8)
+        plt.savefig('results/resultWithEpsilon{}.png'.format(labelTable[0]))
 
     return result
 
 #main contains all function calls
 def main():
-    graph = loadGraph()
-    print("Graph Loading Done!")
+    start = time.time()
+    graph = loadGraph(sys.argv[1])
+    end = time.time()
+    print("Loading Graph done in: {:.2f}".format(end-start))
+
     start = time.time()
     graph, subjects, predicates, objects = preprocessing_tensor(graph)
     end = time.time()
     print("Preprocessing done in: {:.2f}".format(end-start))
-    rawLabels, labels = clustering(graph)
-    print("Clustering Done!")
+
     start = time.time()
-    result = postprocessing(rawLabels, labels, graph, subjects, predicates, objects)
+    erlTable = clustering(graph)
+    end = time.time()
+    print("Clustering done in: {:.2f}".format(end-start))
+
+    start = time.time()
+    result = postprocessing(erlTable, graph, subjects, predicates, objects)
     end = time.time()
     print("Postprocessing done in: {:.2f}".format(end-start))
 
