@@ -124,8 +124,8 @@ def labels_from_DBclusters(db):
     label_counts = [(i, np.sum(db.labels_==i)) for i in set(db.labels_) - set([-1])]
     label_counts.sort(key=lambda x : -x[1]) # sort by counts per class, descending
     
-    # assign the labels. Those points with label =-1 get highest label (equal to number of classes -1)    
-    labels[db.labels_== -1] = len(set(db.labels_))  - 1
+    # assign the labels. Those points with label =-1 get highest label (equal to number of classes -1)
+    labels[db.labels_== -1] = len(set(db.labels_)) - 1
     for i, (label, label_count) in enumerate(label_counts):
         labels[db.labels_==label] = i
         
@@ -138,7 +138,7 @@ def labels_from_DBclusters(db):
 def clustering(graph):
     resultTable = []
     for epsilon in range(30,60,5):
-        db = DBSCAN(eps=(epsilon/100), min_samples=1)
+        db = DBSCAN(eps=(epsilon/100), min_samples=100)
         db.fit(graph)
         resultTable.append([(epsilon/100), db.labels_, labels_from_DBclusters(db)])
 
