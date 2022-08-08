@@ -82,7 +82,7 @@ def preprocessing_tensor(graph):
 
     #transform 3D matrix into correctly sliced 2D csr matrix
     #TEST
-    startC = time.time()
+    #startC = time.time()
     graphMatrix = sparse.COO(graphMatrix)
 
     for n in range(0,len(graphSubjects)):
@@ -100,8 +100,8 @@ def preprocessing_tensor(graph):
     
     #TEST
     #print("Endresult:\n",twoDMatrix.todense())
-    endC = time.time()
-    print("Conversion done in: {:.2f}".format(endC-startC))
+    #endC = time.time()
+    #print("Conversion done in: {:.2f}".format(endC-startC))
     return result, graphSubjects, graphPredicates, graphObjects
 
 
@@ -138,15 +138,16 @@ def labels_from_DBclusters(db):
 def clustering(graph):
     resultTable = []
     for epsilon in range(30,60,5):
-        db = DBSCAN(eps=(epsilon/100), min_samples=100)
+        minSamples = 100
+        db = DBSCAN(eps=(epsilon/100), min_samples=minSamples)
         db.fit(graph)
-        resultTable.append([(epsilon/100), db.labels_, labels_from_DBclusters(db)])
+        resultTable.append([(epsilon/100), db.labels_, labels_from_DBclusters(db), minSamples])
 
     return resultTable
 
 #TODO expand
 #does some postprocessing and visualization
-def postprocessing(erlTable, graph, subjects, predicates, objects):
+def postprocessing(erlmTable, graph, subjects, predicates, objects):
     X_2D = TSNE(n_components=2, perplexity=30, learning_rate=200, n_iter=400, init='random').fit_transform(graph) # collapse in 2-D space for plotting
 
     #get manually inserted errors
@@ -156,30 +157,35 @@ def postprocessing(erlTable, graph, subjects, predicates, objects):
     manErrSum = (manErr1 + manErr2) + manErr3
     errSub = list(manErrSum.subjects(unique=True))
 
-    #get indices of errorSubjects
-    errFound = np.empty(shape=(0), dtype= int)
-    for enumS, sub in enumerate(subjects):
-        for err in errSub:
-            if sub == err:
-                errFound = np.append(errFound, enumS)
+    #gets True values at i where subjects[i] == element in errSub
+    #gets False values everywhere else
+    errFound = np.isin(subjects,errSub)
+    #return only the indices where errFound == true
+    errInd = np.where(errFound)
+
+    #TEST
+    #print("errSum non unique:",len(list(manErrSum.subjects())))
     #print(subjects)
     #print("len(errSub)):",len(errSub))
     #print("len(errFound):",len(errFound))
     #print("errFound:",errFound)
 
     #saving result .txt and .png for each Epsilon 
-    for index, labelTable in enumerate(erlTable):
+    for index, labelTable in enumerate(erlmTable):
         
-        #SAVING DATA TO DISK
+        #WRITING DATA TO DISK
            
-        total = len(labelTable[1])
-        errLabels = labelTable[1][errFound] #works to find all values in the trueLabel table for the erorrs. Returns a list.
-        ptotal = sum(labelTable[1] == -1)
-        tp = sum(errLabels == -1)
-        fp = ptotal - tp
-        ntotal = sum(labelTable[1] != -1)
-        fn = len(errLabels) - tp
-        tn = ntotal - fn
+        total = len(labelTable[1])          #number of subjects
+        errLabels = labelTable[1][errInd]   #works to find all values in the trueLabel table for the errors. Returns a list.
+        ptotal = sum(labelTable[1] == -1)   #number of all outliers found
+        tp = sum(errLabels == -1)           #number of correct outliers found
+        fp = ptotal - tp                    #number of normal data determined as outliers
+        ntotal = sum(labelTable[1] != -1)   #number of normal data found
+        fn = len(errLabels) - tp            #number of outlier determined as normal
+        tn = ntotal - fn                    #number of normal data determined as normal
+        prec =  tp / (tp + fp) if (tp + fp) > 0 else 0                              #Precision
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0                             #Recall
+        f1 = 2 * ((prec * recall) / (prec + recall)) if (prec + recall) > 0 else 0  #F1 Score
 
         result = []
         for e in range(0,len(labelTable[1])):
@@ -191,34 +197,42 @@ def postprocessing(erlTable, graph, subjects, predicates, objects):
         filename = "results/resultWithEpsilon{}.txt".format(labelTable[0])
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         with open(filename, 'w') as resfile:
-            resfile.write("Epsilon:"+str(labelTable[0])+"\n")
-            resfile.write("True Positives: {}  False Positives: {}  Positives Total: {}\nTrue Negatives: {}  False Negatives: {}  Total Negatives: {} \nTotal Amount of Subjects: {}\n\n"
-                                        .format(tp, fp, ptotal, tn, fn, ntotal, total))
+            resfile.write("Epsilon: {} min_samples: {}\n".format(labelTable[0],labelTable[3]))
+            resfile.write("Total Amount of Subjects: {}\n".format(total))
+            resfile.write("True Positives: {}  False Positives: {}  Positives Total: {}\n".format(tp, fp, ptotal))
+            resfile.write("True Negatives: {}  False Negatives: {}  Total Negatives: {}\n".format(tn, fn, ntotal))
+            resfile.write("Precision: {:.2%} Recall: {:.2%} F1-Score: {:.2f}\n\n".format(prec, recall, f1))
             for e in result:
-                resfile.write(str(e)+"\n")         
+                resfile.write("{}\n".format(e))     
 
         #VISUALISATION
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        
+        pos = errInd[0][labelTable[1][errInd[0]] == -1]
+        neg = errInd[0][labelTable[1][errInd[0]] != -1] 
+        
+        #TEST
+        #print("len(errFound):",len(errFound))
+        #print("errInd[0]:", errInd[0])
+        #print("len(errInd[0]):", len(errInd[0]))
+        #print("pos:", pos)
+        #print("len(pos):", len(pos))
+        #print("len(pos) == tp:",len(pos) == tp)
+        #print("neg:", neg)
+        #print("len(neg):", len(neg))
+        #print("len(neg) == fn:",len(neg) == fn)
 
-        for i in set(labelTable[1]):
-            if i == -1: 
-                ax.scatter(X_2D[errFound, 0], X_2D[errFound, 1], c='r', marker='x', s=80, label='True Positive DBSCAN Outlier')
-            else:
-                ax.scatter(X_2D[errFound, 0], X_2D[errFound, 1], c='b', marker='x', s=80, label='False Negative')
+        ax.scatter(X_2D[pos, 0], X_2D[pos, 1], c='r', marker='x', s=80, label='Correctly Identified Outlier')
+        ax.scatter(X_2D[neg, 0], X_2D[neg, 1], c='b', marker='x', s=80, label='Falsely Overlooked Outlier')
 
-        for i in set(labelTable[1]):
-            if i == -1: 
-                #outlier according to dbscan
-                ax.scatter(X_2D[labelTable[1]==i, 0], X_2D[labelTable[1]==i, 1], c='r', s=4, label='DBSCAN Outlier')
-            elif i == 0: 
-                #base class according to dbscan
-                ax.scatter(X_2D[labelTable[1]==i, 0], X_2D[labelTable[1]==i, 1], c='b', s=4, label='DBSCAN within range')
-            else:
-                ax.scatter(X_2D[labelTable[1]==i, 0], X_2D[labelTable[1]==i, 1], c='b', s=4)
+        #outlier according to dbscan
+        ax.scatter(X_2D[labelTable[1]==-1, 0], X_2D[labelTable[1]==-1, 1], c='r', s=4, label='DBSCAN Outlier')
+        #base class according to dbscan
+        ax.scatter(X_2D[labelTable[1]!=-1, 0], X_2D[labelTable[1]!=-1, 1], c='b', s=4, label='DBSCAN within range')
 
         plt.axis('off')
-        plt.legend(loc = 5, fontsize = 8)
+        plt.legend(fontsize = 8)
         plt.savefig('results/resultWithEpsilon{}.png'.format(labelTable[0]))
 
     return result
