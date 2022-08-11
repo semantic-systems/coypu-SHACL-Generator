@@ -264,4 +264,5 @@ def main():
     
     print("Done!")
 
-main()
+if __name__ == "__main__":
+    main()
