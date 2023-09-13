@@ -169,16 +169,16 @@ def postprocessing(erlmTable, graph, subjects, predicates, objects):
 
     #gets True values at i where subjects[i] == element in errSub
     #gets False values everywhere else
-    errFound = np.isin(subjects,errSub)
-    #return only the indices where errFound == true
-    errInd = np.where(errFound)
+    errMask = np.isin(subjects,errSub)
+    #return only the indices where errMask == true
+    errInd = np.where(errMask)
 
     #TEST
     #print("errSum non unique:",len(list(manErrSum.subjects())))
     #print(subjects)
     #print("len(errSub)):",len(errSub))
-    #print("len(errFound):",len(errFound))
-    #print("errFound:",errFound)
+    #print("len(errMask):",len(errMask))
+    #print("errMask:",errMask)
 
     hyperparamComparison = []
     lastMinSamples = 0
@@ -233,15 +233,31 @@ def postprocessing(erlmTable, graph, subjects, predicates, objects):
         #     for e in result:
         #         resfile.write("{}\n".format(e))     
 
-        #VISUALISATION
+        allInd = np.arange(len(subjects))
 
-        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        # gold/reality
+        goldPosInd = errInd[0]
+        goldPosMask = np.isin(allInd, goldPosInd) # tp + fn
+        goldNegMask = ~goldPosMask # tn + fp
         
-        pos = errInd[0][labelTable[1][errInd[0]] == -1]
-        neg = errInd[0][labelTable[1][errInd[0]] != -1] 
+        # predicted
+        posMask = labelTable[1] == -1 # tp + fp
+        negMask = ~posMask # tn + fn
+        
+        tnMask = np.logical_and(negMask, goldNegMask)
+        fpMask = np.logical_and(posMask, goldNegMask)
+        fnMask = np.logical_and(negMask, goldPosMask)
+        tpMask = np.logical_and(posMask, goldPosMask)
+
+        tnInd = allInd[tnMask]
+        fpInd = allInd[fpMask]
+        fnInd = allInd[fnMask]
+        tpInd = allInd[tpMask]
+
+        assert len(tpInd) + len(fpInd) + len(tnInd) + len(fnInd) == len(subjects)
         
         #TEST
-        #print("len(errFound):",len(errFound))
+        #print("len(errMask):",len(errMask))
         #print("errInd[0]:", errInd[0])
         #print("len(errInd[0]):", len(errInd[0]))
         #print("pos:", pos)
@@ -250,13 +266,21 @@ def postprocessing(erlmTable, graph, subjects, predicates, objects):
         #print("neg:", neg) len(neg))
         #print("len(neg) == fn:",len(neg) == fn)
 
-        ax.scatter(X_2D[pos, 0], X_2D[pos, 1], c='green', marker='x', s=80, label='Correctly Identified Outlier')
-        ax.scatter(X_2D[neg, 0], X_2D[neg, 1], c='red', marker='x', s=80, label='Falsely Overlooked Outlier')
+        #VISUALISATION
+
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+
+        ax.scatter(X_2D[tnInd, 0], X_2D[tnInd, 1], c='black', marker='.', s=1, label='Correct Non-Outlier')
+
+        ax.scatter(X_2D[fnInd, 0], X_2D[fnInd, 1], c='red', marker='o', s=60, label='False Non-Outlier')
+        ax.scatter(X_2D[fpInd, 0], X_2D[fpInd, 1], c='red', marker='x', s=60, label='Falsely Identified Outlier')
+
+        ax.scatter(X_2D[tpInd, 0], X_2D[tpInd, 1], c='green', marker='*', s=2, label='Correctly Identified Outlier')
 
         #outlier according to dbscan
-        ax.scatter(X_2D[labelTable[1]==-1, 0], X_2D[labelTable[1]==-1, 1], c='blue', s=2, label='DBSCAN Outlier')
+        #ax.scatter(X_2D[labelTable[1]==-1, 0], X_2D[labelTable[1]==-1, 1], c='blue', s=2, label='DBSCAN Outlier')
         #base class according to dbscan
-        ax.scatter(X_2D[labelTable[1]!=-1, 0], X_2D[labelTable[1]!=-1, 1], c='black', s=2, label='DBSCAN within range')
+        #ax.scatter(X_2D[labelTable[1]!=-1, 0], X_2D[labelTable[1]!=-1, 1], c='black', s=2, label='DBSCAN within range')
 
         ax.axis('off')
         ax.legend(fontsize = 8)
