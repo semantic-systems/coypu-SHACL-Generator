@@ -1,5 +1,6 @@
 from logging import exception
 import sys, time, os
+from dataclasses import dataclass
 
 from rdflib import Graph, URIRef, Literal, XSD
 import numpy as np
@@ -137,13 +138,22 @@ def labels_from_DBclusters(db):
 #does clustering on matrix of vectors
 def clustering(graph):
     resultTable = []
-    for epsilon in range(30,60,5):
-        minSamples = 100
-        db = DBSCAN(eps=(epsilon/100), min_samples=minSamples)
-        db.fit(graph)
-        resultTable.append([(epsilon/100), db.labels_, labels_from_DBclusters(db), minSamples])
+    for minSamples in range(100,500,100):
+        for epsilon in range(40,50,2):
+            # minSamples = 100
+            db = DBSCAN(eps=(epsilon/100), min_samples=minSamples)
+            db.fit(graph)
+            resultTable.append([(epsilon/100), db.labels_, labels_from_DBclusters(db), minSamples])
 
     return resultTable
+
+@dataclass
+class Result():
+    epsilon: float
+    minSamples: int
+    f1: float
+    precision: float
+    recall: float
 
 #TODO expand
 #does some postprocessing and visualization
@@ -151,9 +161,9 @@ def postprocessing(erlmTable, graph, subjects, predicates, objects):
     X_2D = TSNE(n_components=2, perplexity=30, learning_rate=200, n_iter=400, init='random').fit_transform(graph) # collapse in 2-D space for plotting
 
     #get manually inserted errors
-    manErr1 = loadGraph("outlier%20detection//Training74//Set2_errors.nt")
-    manErr2 = loadGraph("outlier%20detection//Training74//Set5_errors.nt")
-    manErr3 = loadGraph("outlier%20detection//Training74//Set7_errors.nt")
+    manErr1 = loadGraph("Training74//Set2_errors.nt")
+    manErr2 = loadGraph("Training74//Set5_errors.nt")
+    manErr3 = loadGraph("Training74//Set7_errors.nt")
     manErrSum = (manErr1 + manErr2) + manErr3
     errSub = list(manErrSum.subjects(unique=True))
 
@@ -170,10 +180,13 @@ def postprocessing(erlmTable, graph, subjects, predicates, objects):
     #print("len(errFound):",len(errFound))
     #print("errFound:",errFound)
 
+    hyperparamComparison = []
+    lastMinSamples = 0
+
+
     #saving result .txt and .png for each Epsilon 
+    result = []
     for index, labelTable in enumerate(erlmTable):
-        
-        #WRITING DATA TO DISK
            
         total = len(labelTable[1])          #number of subjects
         errLabels = labelTable[1][errInd]   #works to find all values in the trueLabel table for the errors. Returns a list.
@@ -187,23 +200,38 @@ def postprocessing(erlmTable, graph, subjects, predicates, objects):
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0                             #Recall
         f1 = 2 * ((prec * recall) / (prec + recall)) if (prec + recall) > 0 else 0  #F1 Score
 
-        result = []
+        if labelTable[3] > lastMinSamples:
+            hyperparamComparison.append([])
+            lastMinSamples = labelTable[3]
+        
+        hyperparamComparison[-1].append(
+            Result(
+                epsilon=labelTable[0],
+                minSamples=labelTable[3],
+                f1=f1,
+                precision=prec,
+                recall=recall,
+            )
+        )
+        
+        #WRITING DATA TO DISK
+        filenameBase = f"results/resultEps{labelTable[0]}minSmp{labelTable[3]}"
+
         for e in range(0,len(labelTable[1])):
             #version with copied label method
             #result.append([subjects[e],labelTable[1][e],labelTable[2][e]])
             #version with exclusively raw labels
             result.append([subjects[e],labelTable[1][e]])
 
-        filename = "results/resultWithEpsilon{}.txt".format(labelTable[0])
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
-        with open(filename, 'w') as resfile:
-            resfile.write("Epsilon: {} min_samples: {}\n".format(labelTable[0],labelTable[3]))
-            resfile.write("Total Amount of Subjects: {}\n".format(total))
-            resfile.write("True Positives: {}  False Positives: {}  Positives Total: {}\n".format(tp, fp, ptotal))
-            resfile.write("True Negatives: {}  False Negatives: {}  Total Negatives: {}\n".format(tn, fn, ntotal))
-            resfile.write("Precision: {:.2%} Recall: {:.2%} F1-Score: {:.2f}\n\n".format(prec, recall, f1))
-            for e in result:
-                resfile.write("{}\n".format(e))     
+        # os.makedirs(os.path.dirname(filenameBase), exist_ok=True)
+        # with open(filenameBase+".txt", 'w') as resfile:
+        #     resfile.write("Epsilon: {} min_samples: {}\n".format(labelTable[0],labelTable[3]))
+        #     resfile.write("Total Amount of Subjects: {}\n".format(total))
+        #     resfile.write("True Positives: {}  False Positives: {}  Positives Total: {}\n".format(tp, fp, ptotal))
+        #     resfile.write("True Negatives: {}  False Negatives: {}  Total Negatives: {}\n".format(tn, fn, ntotal))
+        #     resfile.write("Precision: {:.2%} Recall: {:.2%} F1-Score: {:.2f}\n\n".format(prec, recall, f1))
+        #     for e in result:
+        #         resfile.write("{}\n".format(e))     
 
         #VISUALISATION
 
@@ -219,21 +247,50 @@ def postprocessing(erlmTable, graph, subjects, predicates, objects):
         #print("pos:", pos)
         #print("len(pos):", len(pos))
         #print("len(pos) == tp:",len(pos) == tp)
-        #print("neg:", neg)
-        #print("len(neg):", len(neg))
+        #print("neg:", neg) len(neg))
         #print("len(neg) == fn:",len(neg) == fn)
 
-        ax.scatter(X_2D[pos, 0], X_2D[pos, 1], c='r', marker='x', s=80, label='Correctly Identified Outlier')
-        ax.scatter(X_2D[neg, 0], X_2D[neg, 1], c='b', marker='x', s=80, label='Falsely Overlooked Outlier')
+        ax.scatter(X_2D[pos, 0], X_2D[pos, 1], c='green', marker='x', s=80, label='Correctly Identified Outlier')
+        ax.scatter(X_2D[neg, 0], X_2D[neg, 1], c='red', marker='x', s=80, label='Falsely Overlooked Outlier')
 
         #outlier according to dbscan
-        ax.scatter(X_2D[labelTable[1]==-1, 0], X_2D[labelTable[1]==-1, 1], c='r', s=4, label='DBSCAN Outlier')
+        ax.scatter(X_2D[labelTable[1]==-1, 0], X_2D[labelTable[1]==-1, 1], c='blue', s=2, label='DBSCAN Outlier')
         #base class according to dbscan
-        ax.scatter(X_2D[labelTable[1]!=-1, 0], X_2D[labelTable[1]!=-1, 1], c='b', s=4, label='DBSCAN within range')
+        ax.scatter(X_2D[labelTable[1]!=-1, 0], X_2D[labelTable[1]!=-1, 1], c='black', s=2, label='DBSCAN within range')
 
-        plt.axis('off')
-        plt.legend(fontsize = 8)
-        plt.savefig('results/resultWithEpsilon{}.png'.format(labelTable[0]))
+        ax.axis('off')
+        ax.legend(fontsize = 8)
+        fig.savefig(filenameBase+'.png')
+        plt.close(fig)
+    
+    # hyperparam comparison plots
+    for metricName, selector in [
+            ("F1", lambda x: x.f1), 
+            ("Recall", lambda x: x.recall), 
+            ("Precison", lambda x: x.precision)]:
+        mat = []
+        for row in hyperparamComparison:
+            mat.append([selector(res) for res in row])
+
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        sampleRow = hyperparamComparison[0]
+
+        xticks = [sampleResult.epsilon for sampleResult in sampleRow]
+        ax.set_xticks(np.arange(len(sampleRow)), labels=xticks)
+
+        yticks = [row[0].minSamples for row in hyperparamComparison]
+        ax.set_yticks(np.arange(len(hyperparamComparison)), labels=yticks)
+
+        for y in range(len(hyperparamComparison)):
+            for x in range(len(sampleRow)):
+                text = ax.text(x, y, round(selector(hyperparamComparison[y][x]), ndigits=4),
+                    ha="center", va="center", color="w")
+        
+        ax.imshow(mat)
+        ax.set_title(metricName + " of different hyperparameters (minSamples x epsilon)")
+        fig.tight_layout()
+        fig.savefig(f"results/hyperparamComparison{metricName}.png")
+
 
     return result
 
