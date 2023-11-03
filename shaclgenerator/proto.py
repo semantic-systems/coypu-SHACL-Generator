@@ -221,7 +221,7 @@ def postprocessing(labels, subjects):
     for e in range(0,len(labels)):
         result.append([subjects[e],labels[e]])
     
-    with open('result.txt', 'w') as resfile:
+    with open('../data/Training74/result.txt', 'w') as resfile:
         for e in result:
             resfile.write(str(e)+"\n")
     return result    
