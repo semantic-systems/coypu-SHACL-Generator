@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+import logging
+from argparse import ArgumentParser
+from typing import List
+
+from util import BackEnd
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('generate_shacl')
+
+
+def main(input_file_path: str, back_ends: List[BackEnd]):
+    logger.info(f'generate_shacl called with {input_file_path} and backend(s) {", ".join(map(lambda b: b.value, back_ends))}')
+
+
+if __name__ == '__main__':
+    argument_parser = ArgumentParser()
+    argument_parser.add_argument('input_file')
+
+    # correspond to values of util.BackEnd enum
+    argument_parser.add_argument('--shexer', action='store_true')
+    argument_parser.add_argument('--shaclgen', action='store_true')
+
+    args = argument_parser.parse_args()
+
+    input_file_path = args.input_file
+
+    back_ends = []
+    if args.shexer:
+        back_ends.append(BackEnd.SHEXER)
+    if args.shaclgen:
+        back_ends.append(BackEnd.SHACLGEN)
+
+    if not back_ends:
+        back_ends.append(BackEnd.SHEXER)
+
+    main(input_file_path, back_ends)

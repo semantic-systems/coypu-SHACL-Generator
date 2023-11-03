@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+import logging
+from argparse import ArgumentParser
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('evaluate_shacl')
+
+
+def main(input_rdf_file_path: str, input_shacl_file_path: str):
+    logger.info(
+        f'evaluate_shacle called with {input_rdf_file_path} and '
+        f'{input_shacl_file_path}'
+    )
+
+
+if __name__ == '__main__':
+    argument_parser = ArgumentParser()
+
+    argument_parser.add_argument('input_rdf_file')
+    argument_parser.add_argument('input_shacl_file')
+
+    args = argument_parser.parse_args()
+
+    input_rdf_file_path = args.inout_rdf_file
+    input_shacl_file_path = args.input_shacl_file
+
+    main(input_rdf_file_path, input_shacl_file_path)
