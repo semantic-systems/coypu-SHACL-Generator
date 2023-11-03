@@ -4,13 +4,18 @@ from argparse import ArgumentParser
 from typing import List
 
 from util import BackEnd
+from shaclgenerator.shexer_adapter import ShexerAdapter
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('generate_shacl')
 
 
-def main(input_file_path: str, back_ends: List[BackEnd]):
+def main(input_file_path: str, back_ends: List[BackEnd], target_classes:List[str]):
     logger.info(f'generate_shacl called with {input_file_path} and backend(s) {", ".join(map(lambda b: b.value, back_ends))}')
+
+    if BackEnd.SHEXER in back_ends:
+        shexer = ShexerAdapter(input_file_path, target_classes)
+        print(shexer.generate_shacl())
 
 
 if __name__ == '__main__':
@@ -21,9 +26,14 @@ if __name__ == '__main__':
     argument_parser.add_argument('--shexer', action='store_true')
     argument_parser.add_argument('--shaclgen', action='store_true')
 
+    argument_parser.add_argument('--target_classes', type=str, action='store', 
+        help="Comma seperated class URIs to generate shapes for.", required=True,
+    )
+
     args = argument_parser.parse_args()
 
     input_file_path = args.input_file
+    target_classes = str(args.target_classes).split(",")
 
     back_ends = []
     if args.shexer:
@@ -33,5 +43,5 @@ if __name__ == '__main__':
 
     if not back_ends:
         back_ends.append(BackEnd.SHEXER)
-
-    main(input_file_path, back_ends)
+    
+    main(input_file_path, back_ends, target_classes)
