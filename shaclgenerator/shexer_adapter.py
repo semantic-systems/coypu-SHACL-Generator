@@ -3,8 +3,10 @@ from typing import List
 from shexer.shaper import Shaper
 from shexer.consts import NT, SHACL_TURTLE
 
+from shaclgenerator import SHACLGenerator
 
-class ShexerAdapter:
+
+class ShexerAdapter(SHACLGenerator):
     def __init__(self, input_file_path:str, target_classes:List[str]):
         self.shaper = Shaper(
             target_classes=target_classes,

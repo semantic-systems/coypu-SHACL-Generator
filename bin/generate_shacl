@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging
+import os
 from argparse import ArgumentParser
 from typing import List
 
@@ -10,12 +11,27 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('generate_shacl')
 
 
-def main(input_file_path: str, back_ends: List[BackEnd], target_classes:List[str]):
-    logger.info(f'generate_shacl called with {input_file_path} and backend(s) {", ".join(map(lambda b: b.value, back_ends))}')
+def main(
+        input_file_path: str,
+        output_directory_path: str,
+        back_ends: List[BackEnd],
+        target_classes: List[str]):
+
+    logger.info(
+        f'generate_shacl called with {input_file_path} and backend(s) '
+        f'{", ".join(map(lambda b: b.value, back_ends))}'
+    )
+
+    if not os.path.exists(output_directory_path):
+        os.mkdir(output_directory_path)
 
     if BackEnd.SHEXER in back_ends:
         shexer = ShexerAdapter(input_file_path, target_classes)
-        print(shexer.generate_shacl())
+
+        shacl_result_str: str = shexer.generate_shacl()
+        out_path = os.path.join(output_directory_path, 'shexer_result.ttl')
+        with open(out_path, 'w') as shexer_result_file:
+            shexer_result_file.write(shacl_result_str)
 
 
 if __name__ == '__main__':
@@ -26,14 +42,25 @@ if __name__ == '__main__':
     argument_parser.add_argument('--shexer', action='store_true')
     argument_parser.add_argument('--shaclgen', action='store_true')
 
-    argument_parser.add_argument('--target_classes', type=str, action='store', 
-        help="Comma seperated class URIs to generate shapes for.", required=True,
+    argument_parser.add_argument(
+        '--target_classes',
+        type=str,
+        action='store',
+        help='Comma separated class URIs to generate shapes for.',
+        required=True,
+    )
+
+    argument_parser.add_argument(
+        '--shacl_output_directory',
+        required=False,
+        default='out/'
     )
 
     args = argument_parser.parse_args()
 
     input_file_path = args.input_file
-    target_classes = str(args.target_classes).split(",")
+    target_classes = args.target_classes.split(',')
+    output_dir_path = args.shacl_output_directory
 
     back_ends = []
     if args.shexer:
@@ -44,4 +71,4 @@ if __name__ == '__main__':
     if not back_ends:
         back_ends.append(BackEnd.SHEXER)
     
-    main(input_file_path, back_ends, target_classes)
+    main(input_file_path, output_dir_path, back_ends, target_classes)
