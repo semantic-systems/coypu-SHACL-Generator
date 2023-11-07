@@ -18,8 +18,10 @@ setup(
         'bin/evaluate_shacl',
     ],
     install_requires=[
-        'shaclgen==0.2.5.2',
-        'pyshacl==0.23.0',
+        'pyshacl',
+        'rdflib',
+        # 'shaclgen==0.2.5.2',  # outdated
+        'shaclgen @ git+https://github.com/patrickwestphal/shaclgen@0.2.5.3-patrickwestphal#egg=shaclgen',
         'shexer==2.2.1',
-    ]
+    ],
 )
