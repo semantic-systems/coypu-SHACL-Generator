@@ -6,6 +6,7 @@ from typing import List
 
 from rdflib import Graph
 
+from shaclgenerator.shaclgen_adapter import ShaclgenAdapter
 from util import BackEnd
 from shaclgenerator.shexer_adapter import ShexerAdapter
 
@@ -33,6 +34,14 @@ def main(
         shacl_result: Graph = shexer.generate_shacl()
 
         out_path = os.path.join(output_directory_path, 'shexer_result.ttl')
+        shacl_result.serialize(destination=out_path, format='ttl')
+
+    if BackEnd.SHACLGEN in back_ends:
+        shacl_gen = ShaclgenAdapter(input_file_path)
+
+        shacl_result: Graph = shacl_gen.generate_shacl()
+
+        out_path = os.path.join(output_directory_path, 'shaclgen_result.ttl')
         shacl_result.serialize(destination=out_path, format='ttl')
 
 
