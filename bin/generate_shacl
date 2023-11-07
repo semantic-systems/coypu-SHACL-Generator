@@ -4,6 +4,8 @@ import os
 from argparse import ArgumentParser
 from typing import List
 
+from rdflib import Graph
+
 from util import BackEnd
 from shaclgenerator.shexer_adapter import ShexerAdapter
 
@@ -28,10 +30,10 @@ def main(
     if BackEnd.SHEXER in back_ends:
         shexer = ShexerAdapter(input_file_path, target_classes)
 
-        shacl_result_str: str = shexer.generate_shacl()
+        shacl_result: Graph = shexer.generate_shacl()
+
         out_path = os.path.join(output_directory_path, 'shexer_result.ttl')
-        with open(out_path, 'w') as shexer_result_file:
-            shexer_result_file.write(shacl_result_str)
+        shacl_result.serialize(destination=out_path, format='ttl')
 
 
 if __name__ == '__main__':
