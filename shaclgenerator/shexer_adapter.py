@@ -16,14 +16,16 @@ class ShexerAdapter(SHACLGenerator):
             input_format=NT,
         )
             
-    def generate_shacl(self, min_support=0.5) -> Graph:
+    def generate_shacl(self, acceptance_threshold) -> Graph:
         g = Graph()
         g.parse(
             StringIO(self.shaper.shex_graph(
                 output_format=SHACL_TURTLE,
                 string_output=True,
-                acceptance_threshold=min_support,
+                acceptance_threshold=acceptance_threshold,
             )),
             format='ttl')
 
         return g
+    
+    

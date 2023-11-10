@@ -7,7 +7,7 @@ from typing import List
 from rdflib import Graph
 
 from shaclgenerator.shaclgen_adapter import ShaclgenAdapter
-from util import BackEnd
+from util import BackEnd, get_all_classes
 from shaclgenerator.shexer_adapter import ShexerAdapter
 
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +18,8 @@ def main(
         input_file_path: str,
         output_directory_path: str,
         back_ends: List[BackEnd],
-        target_classes: List[str]):
+        shexer_acceptance_threshold: float,
+        shexer_type_property: str):
 
     logger.info(
         f'generate_shacl called with {input_file_path} and backend(s) '
@@ -29,9 +30,11 @@ def main(
         os.mkdir(output_directory_path)
 
     if BackEnd.SHEXER in back_ends:
-        shexer = ShexerAdapter(input_file_path, target_classes)
+        classes = get_all_classes(input_file_path, shexer_type_property)
+        print(classes)
+        shexer = ShexerAdapter(input_file_path, classes)
 
-        shacl_result: Graph = shexer.generate_shacl()
+        shacl_result: Graph = shexer.generate_shacl(shexer_acceptance_threshold)
 
         out_path = os.path.join(output_directory_path, 'shexer_result.ttl')
         shacl_result.serialize(destination=out_path, format='ttl')
@@ -54,24 +57,26 @@ if __name__ == '__main__':
     argument_parser.add_argument('--shaclgen', action='store_true')
 
     argument_parser.add_argument(
-        '--target_classes',
-        type=str,
-        action='store',
-        help='Comma separated class URIs to generate shapes for.',
-        required=True,
-    )
-
-    argument_parser.add_argument(
         '--shacl_output_directory',
-        required=False,
         default='out/'
+    )
+    argument_parser.add_argument(
+        '--shexer_acceptance_threshold',
+        default=0.0,
+        help="Sets shexers threshold for including shacl constraints."
+    )
+    argument_parser.add_argument(
+        '--shexer_type_property',
+        default="http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+        help="Property which indicated class membership in the input graph."
     )
 
     args = argument_parser.parse_args()
 
     input_file_path = args.input_file
-    target_classes = args.target_classes.split(',')
     output_dir_path = args.shacl_output_directory
+    shexer_acceptance_threshold = args.shexer_acceptance_threshold
+    shexer_type_property = args.shexer_type_property
 
     back_ends = []
     if args.shexer:
@@ -82,4 +87,4 @@ if __name__ == '__main__':
     if not back_ends:
         back_ends.append(BackEnd.SHEXER)
     
-    main(input_file_path, output_dir_path, back_ends, target_classes)
+    main(input_file_path, output_dir_path, back_ends, shexer_acceptance_threshold, shexer_type_property)
