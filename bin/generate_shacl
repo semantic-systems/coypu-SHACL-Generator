@@ -31,7 +31,6 @@ def main(
 
     if BackEnd.SHEXER in back_ends:
         classes = get_all_classes(input_file_path, shexer_type_property)
-        print(classes)
         shexer = ShexerAdapter(input_file_path, classes)
 
         shacl_result: Graph = shexer.generate_shacl(shexer_acceptance_threshold)
