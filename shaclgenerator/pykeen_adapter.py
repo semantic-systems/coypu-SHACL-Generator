@@ -1368,7 +1368,7 @@ class PyKEENAdapter(SHACLGenerator):
         elif kg2shacl_method == "shexer":
             shaper = Shaper(
                 all_classes_mode=True,
-                rdflib_graph=g,
+                rdflib_graph=g_wo_outliers,
             )
             shacl_ttl_str = shaper.shex_graph(
                 string_output=True,
@@ -1381,12 +1381,12 @@ class PyKEENAdapter(SHACLGenerator):
 
 
 
-# if __name__ == '__main__':
-#     input_file_path = '../data/Training74/mergedGraph257.nt'
-#
-#     shacl_generator = PyKEENAdapter(input_file_path, EmbeddingMethod.RGCN, eps=3.45)
-#     res: Graph = shacl_generator.generate_shacl()
-#     res.serialize('/tmp/res.nt', format='ntriples')
+if __name__ == '__main__':
+    input_file_path = 'data/Training74/mergedGraph257.nt'
+
+    shacl_generator = PyKEENAdapter(input_file_path, EmbeddingMethod.TuckER, eps=1.81)
+    res: Graph = shacl_generator.generate_shacl()
+    res.serialize('out/pykeen_TuckER_1_81_shexer_result.nt', format='ntriples')
 
 # fig, ax = plt.subplots()
 # tp_plot, = ax.plot(epss, tps, ':', label='TP')
