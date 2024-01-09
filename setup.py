@@ -23,5 +23,8 @@ setup(
         # 'shaclgen==0.2.5.2',  # outdated
         'shaclgen @ git+https://github.com/patrickwestphal/shaclgen@0.2.5.3-patrickwestphal#egg=shaclgen',
         'shexer==2.2.1',
+        'pykeen',
+        'torch',
+        'matplotlib',
     ],
 )
