@@ -11,9 +11,11 @@ from pykeen.pipeline import pipeline
 from shaclgen.shaclgen import data_graph
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
+from shexer.shaper import Shaper
+from shexer.consts import NT, SHACL_TURTLE
 
 import util.cache as cache
-from lubmevaluator import LUMBEvaluator
+from util.lubmevaluator import LUMBEvaluator
 from util.cache import CacheMiss
 from shaclgenerator import SHACLGenerator
 from util import nt_to_tsv
@@ -1345,12 +1347,38 @@ class PyKEENAdapter(SHACLGenerator):
 
         os.remove(tmp_file_path)
 
-    def generate_shacl(self) -> Graph:
+    def generate_shacl(self, kg2shacl_method="shexer") -> Graph:
+        """
+        Generates SHACL from a KG with outliers. 
+        It first idetifies and removes the outliers, then 
+        returns the SHACL triples from the remaining KG.
+        
+        Args:
+            kg2shacl_method: Method to extract SHACL shapes ("shaclgen" or "shexer")
+
+        """
         g_wo_outliers = self.outlier_detector.remove_outliers()
 
-        # Using Shaclgen under the hood for now
-        shaclgen = data_graph(g_wo_outliers)
-        return shaclgen.gen_graph()
+        assert kg2shacl_method in ["shaclgen","shexer"]
+
+        if kg2shacl_method == "shaclgen":
+            shaclgen = data_graph(g_wo_outliers)
+            shacl = shaclgen.gen_graph()
+
+        elif kg2shacl_method == "shexer":
+            shaper = Shaper(
+                all_classes_mode=True,
+                rdflib_graph=g,
+            )
+            shacl_ttl_str = shaper.shex_graph(
+                string_output=True,
+                output_format=SHACL_TURTLE
+            )
+            shacl = Graph().parse(data=shacl_ttl_str)
+        
+        return shacl 
+    
+
 
 
 # if __name__ == '__main__':
