@@ -2,26 +2,71 @@
 import logging
 from argparse import ArgumentParser
 
+from rdflib import Graph
+from rdflib import RDF, RDFS, SH
+from rdflib.store import Store
+from rdflib.plugins.stores.sparqlstore import SPARQLStore
+from rdflib.plugins.stores.memory import Memory
+from pyshacl import validate
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('evaluate_shacl')
 
+def main(
+        rdf_graph: Graph,
+        input_shacl_file_path: str):
+    
 
-def main(input_rdf_file_path: str, input_shacl_file_path: str):
-    logger.info(
-        f'evaluate_shacle called with {input_rdf_file_path} and '
-        f'{input_shacl_file_path}'
+    conforms, results_graph, results_text = validate(
+        data_graph=rdf_graph,
+        shacl_graph=input_shacl_file_path,
     )
+    # results_graph.serialize("out/eval_shacl.ttl")
+
+    print("conforms:", conforms)
+    num_violations =  len(list(results_graph.subjects(SH.resultSeverity, SH.Violation, unique=True)))
+    print("violations:", num_violations)
+
 
 
 if __name__ == '__main__':
     argument_parser = ArgumentParser()
 
-    argument_parser.add_argument('input_rdf_file')
-    argument_parser.add_argument('input_shacl_file')
+    argument_parser.add_argument('input_shacl_file', type=str)
+    argument_parser.add_argument('--input_rdf_store_url', type=str)
+    argument_parser.add_argument('--input_rdf_file', type=str)
+    argument_parser.add_argument('--auth_name', type=str)
+    argument_parser.add_argument('--auth_pw', type=str)
 
     args = argument_parser.parse_args()
 
-    input_rdf_file_path = args.inout_rdf_file
+    input_rdf_file = args.input_rdf_file
+    input_rdf_store_url = args.input_rdf_store_url
+    auth_name = args.auth_name
+    auth_pw = args.auth_pw
     input_shacl_file_path = args.input_shacl_file
 
-    main(input_rdf_file_path, input_shacl_file_path)
+    # create graph of input data
+    assert input_rdf_file or input_rdf_store_url
+    if input_rdf_store_url:
+        if auth_name and auth_pw:
+            auth = (auth_name, auth_pw)
+        else:
+            auth = None
+
+        store = SPARQLStore(
+            query_endpoint=input_rdf_store_url,
+            auth=auth,
+        )
+        rdf_graph = Graph(store=store)
+
+    elif input_rdf_file:
+        rdf_graph = Graph()
+        rdf_graph.parse(input_rdf_file)
+    logger.info(f'data graph: {rdf_graph}')
+    
+    logger.info(f'shacl file: {input_shacl_file_path}')
+    main(
+        rdf_graph,
+        input_shacl_file_path,
+    )
