@@ -24,9 +24,12 @@ def main(
     # results_graph.serialize("out/eval_shacl.ttl")
 
     print("conforms:", conforms)
+
     num_violations =  len(list(results_graph.subjects(SH.resultSeverity, SH.Violation, unique=True)))
     print("violations:", num_violations)
 
+    num_focus_nodes =  len(list(results_graph.objects(None, SH.focusNode, unique=True)))
+    print("focus nodes:", num_focus_nodes)
 
 
 if __name__ == '__main__':
