@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='coypu-SHACL-Generator',
-    version='',
+    version='0.1.0',
     packages=[
         'shaclgenerator',
         'test',
