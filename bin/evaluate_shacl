@@ -2,34 +2,37 @@
 import logging
 from argparse import ArgumentParser
 
-from rdflib import Graph
-from rdflib import RDF, RDFS, SH
-from rdflib.store import Store
-from rdflib.plugins.stores.sparqlstore import SPARQLStore
-from rdflib.plugins.stores.memory import Memory
 from pyshacl import validate
+from rdflib import Graph
+from rdflib import SH
+from rdflib.plugins.stores.sparqlstore import SPARQLStore
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('evaluate_shacl')
 
+
 def main(
         rdf_graph: Graph,
-        input_shacl_file_path: str):
-    
+        input_shacl_file_path: str
+):
 
     conforms, results_graph, results_text = validate(
         data_graph=rdf_graph,
         shacl_graph=input_shacl_file_path,
     )
-    # results_graph.serialize("out/eval_shacl.ttl")
+    results_graph.serialize('out/eval_shacl.ttl')
 
-    print("conforms:", conforms)
+    logger.debug(f'conforms: {conforms}')
 
-    num_violations =  len(list(results_graph.subjects(SH.resultSeverity, SH.Violation, unique=True)))
-    print("violations:", num_violations)
+    num_violations = len(
+        list(
+            results_graph.subjects(SH.resultSeverity, SH.Violation, unique=True)
+        )
+    )
+    logger.debug(f'violations: {num_violations}')
 
-    num_focus_nodes =  len(list(results_graph.objects(None, SH.focusNode, unique=True)))
-    print("focus nodes:", num_focus_nodes)
+    num_focus_nodes = len(list(results_graph.objects(None, SH.focusNode, unique=True)))
+    logger.debug(f'focus nodes: {num_focus_nodes}')
 
 
 if __name__ == '__main__':
