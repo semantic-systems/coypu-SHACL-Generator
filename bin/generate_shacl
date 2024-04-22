@@ -7,8 +7,8 @@ from typing import List
 from rdflib import Graph
 
 from shaclgenerator.shaclgen_adapter import ShaclgenAdapter
-from util import BackEnd, get_all_classes
 from shaclgenerator.shexer_adapter import ShexerAdapter
+from util import BackEnd
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('generate_shacl')
@@ -19,7 +19,8 @@ def main(
         output_directory_path: str,
         back_ends: List[BackEnd],
         shexer_acceptance_threshold: float,
-        shexer_type_property: str):
+        shexer_type_property: str
+):
 
     logger.info(
         f'generate_shacl called with {input_file_path} and backend(s) '
@@ -30,10 +31,11 @@ def main(
         os.mkdir(output_directory_path)
 
     if BackEnd.SHEXER in back_ends:
-        classes = get_all_classes(input_file_path, shexer_type_property)
-        shexer = ShexerAdapter(input_file_path, classes)
+        shexer = ShexerAdapter(input_file_path)
+        shexer.acceptance_threshold = shexer_acceptance_threshold
+        shexer.type_property = shexer_type_property
 
-        shacl_result: Graph = shexer.generate_shacl(shexer_acceptance_threshold)
+        shacl_result: Graph = shexer.generate_shacl()
 
         out_path = os.path.join(output_directory_path, 'shexer_result.ttl')
         shacl_result.serialize(destination=out_path, format='ttl')
@@ -87,4 +89,10 @@ if __name__ == '__main__':
     if not back_ends:
         back_ends.append(BackEnd.SHEXER)
 
-    main(input_file_path, output_dir_path, back_ends, shexer_acceptance_threshold, shexer_type_property)
+    main(
+        input_file_path,
+        output_dir_path,
+        back_ends,
+        shexer_acceptance_threshold,
+        shexer_type_property
+    )
